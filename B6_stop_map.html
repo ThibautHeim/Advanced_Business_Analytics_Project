@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B8 Bus Route Stop Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --color-bg: #f7f6f2;
+    --color-surface: #f9f8f5;
+    --color-primary: #01696f;
+    --color-primary-hover: #0c4e54;
+    --color-text: #28251d;
+    --color-text-muted: #7a7974;
+    --color-border: #d4d1ca;
+    --color-dir0: #01696f;
+    --color-dir1: #964219;
+    --font-body: 'Satoshi', 'Inter', sans-serif;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+    --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+    --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+    --shadow-md: 0 4px 12px oklch(0.2 0.01 80 / 0.08);
+    --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font-body);
+    background: var(--color-bg);
+    color: var(--color-text);
+    display: flex;
+    flex-direction: column;
+  }
+  /* Header */
+  header {
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    padding: var(--space-4) var(--space-6);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-shrink: 0;
+  }
+  .header-left { display: flex; align-items: center; gap: var(--space-3); }
+  .logo {
+    width: 36px; height: 36px;
+    background: var(--color-primary);
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-size: 1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: var(--text-lg); font-weight: 600; line-height: 1.2; }
+  header p { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: 2px; }
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: var(--space-2);
+    font-size: var(--text-sm); color: var(--color-text-muted);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg);
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+    user-select: none;
+  }
+  .legend-item:hover { background: white; border-color: var(--color-primary); }
+  .legend-item.active { border-color: var(--color-primary); background: white; }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot-dir0 { background: var(--color-dir0); }
+  .dot-dir1 { background: var(--color-dir1); }
+  /* Main layout */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    flex: 1;
+    overflow: hidden;
+  }
+  /* Sidebar */
+  .sidebar {
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .stop-count {
+    background: var(--color-primary);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 999px;
+  }
+  .stop-list { overflow-y: auto; flex: 1; }
+  .stop-item {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid oklch(from var(--color-border) l c h / 0.5);
+    cursor: pointer;
+    transition: background var(--transition);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .stop-item:hover { background: var(--color-bg); }
+  .stop-item.active { background: white; border-left: 3px solid var(--color-primary); }
+  .stop-num {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    min-width: 20px;
+    text-align: center;
+  }
+  .stop-info {}
+  .stop-name { font-size: var(--text-sm); font-weight: 500; line-height: 1.3; }
+  .stop-obs { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 1px; }
+  /* Direction tabs */
+  .dir-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .dir-tab {
+    flex: 1;
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition);
+    text-align: center;
+  }
+  .dir-tab:hover { color: var(--color-text); }
+  .dir-tab.active-tab {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+  /* Map */
+  #map { flex: 1; z-index: 1; }
+  /* Code block */
+  .code-banner {
+    background: #1c1b19;
+    color: #cdccca;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    padding: var(--space-3) var(--space-6);
+    border-top: 1px solid #393836;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+  .code-label { color: #4f98a3; font-weight: 700; }
+  /* Tooltip popup */
+  .leaflet-popup-content-wrapper {
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-md) !important;
+    border: 1px solid var(--color-border);
+  }
+  .popup-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+  .popup-sub { color: var(--color-text-muted); font-size: 0.8rem; }
+  @media (max-width: 640px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .legend { gap: var(--space-2); }
+    .legend-item span { display: none; }
+  }
+</style>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">B6</div>
+    <div>
+      <h1>B6 Bus Route — Stop Map</h1>
+      <p>NYC MTA · June 2017 · Vehicle proximity coordinates</p>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-item active" onclick="toggleDirection(0, this)">
+      <span class="legend-dot dot-dir0"></span>
+      <span>Direction 0</span>
+    </div>
+    <div class="legend-item active" onclick="toggleDirection(1, this)">
+      <span class="legend-dot dot-dir1"></span>
+      <span>Direction 1</span>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="dir-tabs">
+      <div class="dir-tab active-tab" onclick="switchTab(0, this)">→ Direction 0</div>
+      <div class="dir-tab" onclick="switchTab(1, this)">← Direction 1</div>
+    </div>
+    <div class="sidebar-header">
+      <span>Stops</span>
+      <span class="stop-count" id="stop-count">–</span>
+    </div>
+    <div class="stop-list" id="stop-list"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<div class="code-banner">
+  <span class="code-label">Python</span>
+  <span>Replace sample data below with your actual <code>stops_with_coords</code> DataFrame output</span>
+</div>
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+// Replace this with your actual output from:
+// stops_coords = df_B8[proximity_mask].groupby(['DirectionRef','NextStopPointName'])
+//   .agg(Latitude=(...,'median'), Longitude=(...,'median'), Observations=(...,'count'))
+const stopsData = {
+0:
+[
+  {
+    "name": "CROPSEY AV/BAY 31 ST",
+    "lat": 40.596789,
+    "lng": -73.998126,
+    "obs": 1960
+  },
+  {
+    "name": "BAY PY/BATH AV",
+    "lat": 40.598301,
+    "lng": -73.997599,
+    "obs": 1559
+  },
+  {
+    "name": "CROPSEY AV/23 AV",
+    "lat": 40.595565,
+    "lng": -73.996547,
+    "obs": 1325
+  },
+  {
+    "name": "BAY PY/BENSON AV",
+    "lat": 40.600051,
+    "lng": -73.995779,
+    "obs": 1247
+  },
+  {
+    "name": "BAY PY/86 ST",
+    "lat": 40.602151,
+    "lng": -73.993604,
+    "obs": 3380
+  },
+  {
+    "name": "BAY PK/83 ST",
+    "lat": 40.603555,
+    "lng": -73.992137,
+    "obs": 964
+  },
+  {
+    "name": "BAY PY/80 ST",
+    "lat": 40.605174,
+    "lng": -73.990451,
+    "obs": 1262
+  },
+  {
+    "name": "BAY PY/78 ST",
+    "lat": 40.60625,
+    "lng": -73.989342,
+    "obs": 1492
+  },
+  {
+    "name": "BAY PY/STILLWELL AV",
+    "lat": 40.607668,
+    "lng": -73.987856,
+    "obs": 2381
+  },
+  {
+    "name": "BAY PY/W 12 ST",
+    "lat": 40.609724,
+    "lng": -73.985717,
+    "obs": 1575
+  },
+  {
+    "name": "BAY PY/W 10 ST",
+    "lat": 40.610984,
+    "lng": -73.984403,
+    "obs": 1846
+  },
+  {
+    "name": "BAY PY/WEST 8 ST",
+    "lat": 40.612706,
+    "lng": -73.982623,
+    "obs": 1719
+  },
+  {
+    "name": "BAY PY/64 ST",
+    "lat": 40.614212,
+    "lng": -73.98105,
+    "obs": 1539
+  },
+  {
+    "name": "BAY PY/62 ST",
+    "lat": 40.615194,
+    "lng": -73.980023,
+    "obs": 1546
+  },
+  {
+    "name": "BAY PY/60 ST",
+    "lat": 40.616519,
+    "lng": -73.97865,
+    "obs": 2252
+  },
+  {
+    "name": "BAY PY/MC DONALD AV",
+    "lat": 40.620882,
+    "lng": -73.975315,
+    "obs": 1278
+  },
+  {
+    "name": "BAY PY/E 3 ST",
+    "lat": 40.622347,
+    "lng": -73.973966,
+    "obs": 693
+  },
+  {
+    "name": "AV J/E 5 ST",
+    "lat": 40.623993,
+    "lng": -73.972173,
+    "obs": 2243
+  },
+  {
+    "name": "AV J/OCEAN PY",
+    "lat": 40.624122,
+    "lng": -73.971008,
+    "obs": 2539
+  },
+  {
+    "name": "AV J/E 8 ST",
+    "lat": 40.6244,
+    "lng": -73.968472,
+    "obs": 1204
+  },
+  {
+    "name": "AV J/CONEY ISLAND AV",
+    "lat": 40.624777,
+    "lng": -73.965055,
+    "obs": 4387
+  },
+  {
+    "name": "AV J/E 16 ST",
+    "lat": 40.625235,
+    "lng": -73.960866,
+    "obs": 2993
+  },
+  {
+    "name": "AV J/E 18 ST",
+    "lat": 40.625429,
+    "lng": -73.959123,
+    "obs": 660
+  },
+  {
+    "name": "AV J/OCEAN AV",
+    "lat": 40.625667,
+    "lng": -73.956958,
+    "obs": 2146
+  },
+  {
+    "name": "AV J/E 22 ST",
+    "lat": 40.625828,
+    "lng": -73.955493,
+    "obs": 609
+  },
+  {
+    "name": "GLENWOOD RD/BEDFORD AV",
+    "lat": 40.633145,
+    "lng": -73.95292,
+    "obs": 694
+  },
+  {
+    "name": "BEDFORD AV/CAMPUS RD",
+    "lat": 40.632021,
+    "lng": -73.952708,
+    "obs": 1914
+  },
+  {
+    "name": "BEDFORD AV/AV J",
+    "lat": 40.626207,
+    "lng": -73.952037,
+    "obs": 1122
+  },
+  {
+    "name": "BEDFORD AV/AV I",
+    "lat": 40.628366,
+    "lng": -73.952016,
+    "obs": 634
+  },
+  {
+    "name": "GLENWOOD RD/FLATBUSH AV",
+    "lat": 40.634319,
+    "lng": -73.949752,
+    "obs": 4632
+  },
+  {
+    "name": "GLENWOOD RD/NOSTRAND AV",
+    "lat": 40.63398,
+    "lng": -73.948171,
+    "obs": 6487
+  },
+  {
+    "name": "GLENWOOD RD/E 32 ST",
+    "lat": 40.634101,
+    "lng": -73.946123,
+    "obs": 531
+  },
+  {
+    "name": "GLENWOOD RD/E 34 ST",
+    "lat": 40.634188,
+    "lng": -73.944691,
+    "obs": 599
+  },
+  {
+    "name": "GLENWOOD RD/BROOKLYN AV",
+    "lat": 40.634338,
+    "lng": -73.942259,
+    "obs": 843
+  },
+  {
+    "name": "GLENWOOD RD/E 38 ST",
+    "lat": 40.634435,
+    "lng": -73.940735,
+    "obs": 705
+  },
+  {
+    "name": "GLENWOOD RD/ALBANY AV",
+    "lat": 40.634626,
+    "lng": -73.937653,
+    "obs": 2800
+  },
+  {
+    "name": "AV H/ALBANY AV",
+    "lat": 40.632649,
+    "lng": -73.937049,
+    "obs": 1391
+  },
+  {
+    "name": "AV H/E 43 ST",
+    "lat": 40.632429,
+    "lng": -73.935108,
+    "obs": 507
+  },
+  {
+    "name": "AV H/E 45 ST",
+    "lat": 40.63255,
+    "lng": -73.933136,
+    "obs": 495
+  },
+  {
+    "name": "AV H/E 48 ST",
+    "lat": 40.63267,
+    "lng": -73.931197,
+    "obs": 982
+  },
+  {
+    "name": "AV H/UTICA AV",
+    "lat": 40.632819,
+    "lng": -73.928824,
+    "obs": 3479
+  },
+  {
+    "name": "AV H/E 52 ST",
+    "lat": 40.632952,
+    "lng": -73.926656,
+    "obs": 700
+  },
+  {
+    "name": "AV H/E 54 ST",
+    "lat": 40.63305,
+    "lng": -73.925089,
+    "obs": 781
+  },
+  {
+    "name": "AV H/E 56 ST",
+    "lat": 40.633185,
+    "lng": -73.922943,
+    "obs": 1022
+  },
+  {
+    "name": "GLENWOOD RD/E 58 ST",
+    "lat": 40.633322,
+    "lng": -73.920832,
+    "obs": 1010
+  },
+  {
+    "name": "RALPH AV/GLENWOOD RD",
+    "lat": 40.634223,
+    "lng": -73.9191,
+    "obs": 2585
+  },
+  {
+    "name": "FLATLANDS AV/RALPH AV",
+    "lat": 40.632394,
+    "lng": -73.918633,
+    "obs": 4967
+  },
+  {
+    "name": "FLATLANDS AV /E 77 ST",
+    "lat": 40.633733,
+    "lng": -73.916021,
+    "obs": 977
+  },
+  {
+    "name": "FLATLANDS AV/E 80 ST",
+    "lat": 40.635504,
+    "lng": -73.913281,
+    "obs": 2485
+  },
+  {
+    "name": "FLATLANDS AV/E 82 ST",
+    "lat": 40.636143,
+    "lng": -73.912295,
+    "obs": 934
+  },
+  {
+    "name": "FLATLANDS AV/E 84 ST",
+    "lat": 40.637329,
+    "lng": -73.910464,
+    "obs": 889
+  },
+  {
+    "name": "FLATLANDS AV/E 86 ST",
+    "lat": 40.638225,
+    "lng": -73.909076,
+    "obs": 983
+  },
+  {
+    "name": "FLATLANDS AV/E 88 ST",
+    "lat": 40.639146,
+    "lng": -73.907652,
+    "obs": 767
+  },
+  {
+    "name": "FLATLANDS AV/REMSEN AV",
+    "lat": 40.640058,
+    "lng": -73.906245,
+    "obs": 2022
+  },
+  {
+    "name": "FLATLANDS AV/E 92 ST",
+    "lat": 40.641013,
+    "lng": -73.904763,
+    "obs": 652
+  },
+  {
+    "name": "FLATLANDS AV/E 94 ST",
+    "lat": 40.641895,
+    "lng": -73.903399,
+    "obs": 681
+  },
+  {
+    "name": "GLENWOOD RD/E 98 ST",
+    "lat": 40.645297,
+    "lng": -73.902063,
+    "obs": 3303
+  },
+  {
+    "name": "ROCKAWAY PKWY/SUBWAY STATION",
+    "lat": 40.645807,
+    "lng": -73.901916,
+    "obs": 3476
+  },
+  {
+    "name": "E 96 ST/FLATLANDS AV",
+    "lat": 40.643036,
+    "lng": -73.901643,
+    "obs": 1469
+  },
+  {
+    "name": "GLENWOOD RD/E 100 ST",
+    "lat": 40.646419,
+    "lng": -73.900331,
+    "obs": 391
+  },
+  {
+    "name": "GLENWOOD RD/E 103 ST",
+    "lat": 40.648033,
+    "lng": -73.897886,
+    "obs": 1046
+  },
+  {
+    "name": "GLENWOOD RD/E 105 ST",
+    "lat": 40.648928,
+    "lng": -73.896494,
+    "obs": 933
+  },
+  {
+    "name": "GLENWOOD RD/E 108 ST",
+    "lat": 40.650296,
+    "lng": -73.894374,
+    "obs": 893
+  },
+  {
+    "name": "GLENWOOD RD/WILLIAMS AV",
+    "lat": 40.651145,
+    "lng": -73.893063,
+    "obs": 586
+  },
+  {
+    "name": "COZINE AV/ALABAMA AV",
+    "lat": 40.653053,
+    "lng": -73.889816,
+    "obs": 493
+  },
+  {
+    "name": "COZINE AV/PENNSYLVANIA AV",
+    "lat": 40.654029,
+    "lng": -73.887558,
+    "obs": 2015
+  },
+  {
+    "name": "COZINE AV/VERMONT ST",
+    "lat": 40.65464,
+    "lng": -73.88617,
+    "obs": 1117
+  },
+  {
+    "name": "LIVONIA AV/ASHFORD ST",
+    "lat": 40.666358,
+    "lng": -73.883286,
+    "obs": 4873
+  },
+  {
+    "name": "COZINE AV/VAN SICLEN AV",
+    "lat": 40.656081,
+    "lng": -73.882818,
+    "obs": 1270
+  },
+  {
+    "name": "ASHFORD ST/LINDEN BL",
+    "lat": 40.662407,
+    "lng": -73.880592,
+    "obs": 1742
+  },
+  {
+    "name": "ASHFORD ST/STANLEY AV",
+    "lat": 40.661029,
+    "lng": -73.87958,
+    "obs": 1023
+  },
+  {
+    "name": "COZINE AV/JEROME ST",
+    "lat": 40.657662,
+    "lng": -73.879145,
+    "obs": 564
+  },
+  {
+    "name": "ASHFORD ST/WORTMAN AV",
+    "lat": 40.65961,
+    "lng": -73.878527,
+    "obs": 667
+  },
+  {
+    "name": "ASHFORD ST/COZINE AV",
+    "lat": 40.658321,
+    "lng": -73.877761,
+    "obs": 1291
+  }
+],
+1:
+[
+  {
+    "name": "COZINE AV/ASHFORD ST",
+    "lat": 40.658437,
+    "lng": -73.877793,
+    "obs": 1505
+  },
+  {
+    "name": "ASHFORD ST/WORTMAN AV",
+    "lat": 40.659992,
+    "lng": -73.87881,
+    "obs": 650
+  },
+  {
+    "name": "COZINE AV/JEROME ST",
+    "lat": 40.657742,
+    "lng": -73.87896,
+    "obs": 573
+  },
+  {
+    "name": "ASHFORD ST/STANLEY AV",
+    "lat": 40.661339,
+    "lng": -73.87981,
+    "obs": 1058
+  },
+  {
+    "name": "ASHFORD ST/LINDEN BL",
+    "lat": 40.663079,
+    "lng": -73.881062,
+    "obs": 1608
+  },
+  {
+    "name": "COZINE AV/VAN SICLEN AV",
+    "lat": 40.65635,
+    "lng": -73.882189,
+    "obs": 1279
+  },
+  {
+    "name": "ASHFORD ST/NEW LOTS AV",
+    "lat": 40.665949,
+    "lng": -73.883202,
+    "obs": 4503
+  },
+  {
+    "name": "COZINE AV/VERMONT AV",
+    "lat": 40.654907,
+    "lng": -73.885549,
+    "obs": 1057
+  },
+  {
+    "name": "COZINE AV/PENNSYLVANIA AV",
+    "lat": 40.654279,
+    "lng": -73.886997,
+    "obs": 2094
+  },
+  {
+    "name": "COZINE AV/ALABAMA AV",
+    "lat": 40.653078,
+    "lng": -73.889759,
+    "obs": 527
+  },
+  {
+    "name": "GLENWOOD RD/WILLIAMS AV",
+    "lat": 40.651446,
+    "lng": -73.892599,
+    "obs": 671
+  },
+  {
+    "name": "GLENWOOD RD/E 108 ST",
+    "lat": 40.650508,
+    "lng": -73.894045,
+    "obs": 930
+  },
+  {
+    "name": "GLENWOOD RD/E 104 ST",
+    "lat": 40.648811,
+    "lng": -73.896677,
+    "obs": 964
+  },
+  {
+    "name": "E 103 ST/GLENWOOD RD",
+    "lat": 40.647033,
+    "lng": -73.896678,
+    "obs": 1198
+  },
+  {
+    "name": "FLATLANDS AV/E 101 ST",
+    "lat": 40.645805,
+    "lng": -73.897347,
+    "obs": 903
+  },
+  {
+    "name": "FLATLANDS AV/E 98 ST",
+    "lat": 40.644212,
+    "lng": -73.899817,
+    "obs": 1127
+  },
+  {
+    "name": "FLATLANDS AV / ROCKAWAY PY",
+    "lat": 40.644052,
+    "lng": -73.901107,
+    "obs": 2956
+  },
+  {
+    "name": "E 96 ST/Conlin (DOES NOT STOP)",
+    "lat": 40.643355,
+    "lng": -73.901315,
+    "obs": 926
+  },
+  {
+    "name": "ROCKAWAY STATION/ROCKAWAY STATION",
+    "lat": 40.645645,
+    "lng": -73.902248,
+    "obs": 4297
+  },
+  {
+    "name": "FLATLANDS AV/E 94 ST",
+    "lat": 40.642556,
+    "lng": -73.902378,
+    "obs": 510
+  },
+  {
+    "name": "ROCKAWAY PKY/GLENWOOD RD",
+    "lat": 40.645279,
+    "lng": -73.902474,
+    "obs": 179
+  },
+  {
+    "name": "E 96 ST/Glenwood (DOES NOT STOP)",
+    "lat": 40.644251,
+    "lng": -73.902698,
+    "obs": 825
+  },
+  {
+    "name": "FLATLANDS AV/E 92 ST",
+    "lat": 40.641473,
+    "lng": -73.904052,
+    "obs": 470
+  },
+  {
+    "name": "FLATLANDS AV/REMSEN AV",
+    "lat": 40.640422,
+    "lng": -73.905679,
+    "obs": 2518
+  },
+  {
+    "name": "FLATLANDS AV/E 88 ST",
+    "lat": 40.639356,
+    "lng": -73.907327,
+    "obs": 693
+  },
+  {
+    "name": "FLATLANDS AV/E 86 ST",
+    "lat": 40.638404,
+    "lng": -73.9088,
+    "obs": 883
+  },
+  {
+    "name": "FLATLANDS AV/E 84 ST",
+    "lat": 40.637516,
+    "lng": -73.910173,
+    "obs": 1010
+  },
+  {
+    "name": "FLATLANDS AV/E 82 ST",
+    "lat": 40.636473,
+    "lng": -73.911777,
+    "obs": 2344
+  },
+  {
+    "name": "FLATLANDS AV/E 80 ST",
+    "lat": 40.63567,
+    "lng": -73.913026,
+    "obs": 1302
+  },
+  {
+    "name": "FLATLANDS AV/E 78 ST",
+    "lat": 40.634405,
+    "lng": -73.914984,
+    "obs": 1009
+  },
+  {
+    "name": "FLATLANDS AV/E 76 ST",
+    "lat": 40.633757,
+    "lng": -73.915984,
+    "obs": 380
+  },
+  {
+    "name": "RALPH AV/FLATLANDS AV",
+    "lat": 40.632389,
+    "lng": -73.918346,
+    "obs": 3412
+  },
+  {
+    "name": "GLENWOOD RD/RALPH AV",
+    "lat": 40.63427,
+    "lng": -73.918841,
+    "obs": 2553
+  },
+  {
+    "name": "GLENWOOD RD/E 58 ST",
+    "lat": 40.633692,
+    "lng": -73.920075,
+    "obs": 1018
+  },
+  {
+    "name": "AV H/E 56 ST",
+    "lat": 40.633222,
+    "lng": -73.922383,
+    "obs": 916
+  },
+  {
+    "name": "AV H/E 54 ST",
+    "lat": 40.633141,
+    "lng": -73.923634,
+    "obs": 834
+  },
+  {
+    "name": "AV H/E 52 ST",
+    "lat": 40.633008,
+    "lng": -73.925761,
+    "obs": 653
+  },
+  {
+    "name": "AV H/UTICA AV",
+    "lat": 40.632869,
+    "lng": -73.928013,
+    "obs": 2991
+  },
+  {
+    "name": "AV H/SCHENECTADY AV",
+    "lat": 40.632686,
+    "lng": -73.930942,
+    "obs": 952
+  },
+  {
+    "name": "AV H/E 45 ST",
+    "lat": 40.63255,
+    "lng": -73.933145,
+    "obs": 538
+  },
+  {
+    "name": "AV H/E 43 ST (LTD - not allowed)",
+    "lat": 40.632475,
+    "lng": -73.934393,
+    "obs": 246
+  },
+  {
+    "name": "AV H/E 43 ST",
+    "lat": 40.632446,
+    "lng": -73.934842,
+    "obs": 421
+  },
+  {
+    "name": "AV H/ALBANY AV",
+    "lat": 40.632327,
+    "lng": -73.936683,
+    "obs": 784
+  },
+  {
+    "name": "GLENWOOD RD/ALBANY AV",
+    "lat": 40.634364,
+    "lng": -73.937235,
+    "obs": 1586
+  },
+  {
+    "name": "GLENWOOD RD/E 39 ST",
+    "lat": 40.634571,
+    "lng": -73.938548,
+    "obs": 592
+  },
+  {
+    "name": "GLENWOOD RD/E 37 ST",
+    "lat": 40.634429,
+    "lng": -73.940831,
+    "obs": 709
+  },
+  {
+    "name": "GLENWOOD RD/E 35 ST",
+    "lat": 40.634346,
+    "lng": -73.942114,
+    "obs": 704
+  },
+  {
+    "name": "GLENWOOD RD/NEW YORK AV",
+    "lat": 40.634191,
+    "lng": -73.944633,
+    "obs": 779
+  },
+  {
+    "name": "GLENWOOD RD/NOSTRAND AV",
+    "lat": 40.634019,
+    "lng": -73.947429,
+    "obs": 5149
+  },
+  {
+    "name": "GLENWOOD RD/FLATBUSH AV",
+    "lat": 40.633968,
+    "lng": -73.948711,
+    "obs": 3352
+  },
+  {
+    "name": "GLENWOOD RD/AMERSFORT PL",
+    "lat": 40.6341,
+    "lng": -73.950108,
+    "obs": 1014
+  },
+  {
+    "name": "BEDFORD AV/AV J",
+    "lat": 40.626613,
+    "lng": -73.951684,
+    "obs": 704
+  },
+  {
+    "name": "BEDFORD AV/AV I",
+    "lat": 40.628896,
+    "lng": -73.952113,
+    "obs": 759
+  },
+  {
+    "name": "AV J/E 23 ST",
+    "lat": 40.626154,
+    "lng": -73.952528,
+    "obs": 632
+  },
+  {
+    "name": "BEDFORD AV/GLENWOOD RD (not allowed)",
+    "lat": 40.63347,
+    "lng": -73.952578,
+    "obs": 1181
+  },
+  {
+    "name": "BEDFORD AV/GLENWOOD RD",
+    "lat": 40.633462,
+    "lng": -73.952654,
+    "obs": 1242
+  },
+  {
+    "name": "BEDFORD AV/CAMPUS ROAD",
+    "lat": 40.632401,
+    "lng": -73.95278,
+    "obs": 1822
+  },
+  {
+    "name": "AV J/OCEAN AV",
+    "lat": 40.625792,
+    "lng": -73.955822,
+    "obs": 2416
+  },
+  {
+    "name": "AV J/E 18 ST",
+    "lat": 40.625562,
+    "lng": -73.957904,
+    "obs": 891
+  },
+  {
+    "name": "AV J/E 15 ST",
+    "lat": 40.625257,
+    "lng": -73.960676,
+    "obs": 4077
+  },
+  {
+    "name": "AV J/CONEY ISLAND AV",
+    "lat": 40.624821,
+    "lng": -73.964671,
+    "obs": 4759
+  },
+  {
+    "name": "AV J/E 8 ST",
+    "lat": 40.624495,
+    "lng": -73.967617,
+    "obs": 1412
+  },
+  {
+    "name": "AV J/OCEAN PY",
+    "lat": 40.624236,
+    "lng": -73.969967,
+    "obs": 2652
+  },
+  {
+    "name": "BAY PY/E 3 ST",
+    "lat": 40.623407,
+    "lng": -73.972975,
+    "obs": 1339
+  },
+  {
+    "name": "BAY PY/MC DONALD AV",
+    "lat": 40.62112,
+    "lng": -73.975107,
+    "obs": 2278
+  },
+  {
+    "name": "BAY PY/60 ST",
+    "lat": 40.616904,
+    "lng": -73.978251,
+    "obs": 2036
+  },
+  {
+    "name": "BAY PY/61 ST",
+    "lat": 40.616243,
+    "lng": -73.978935,
+    "obs": 1085
+  },
+  {
+    "name": "BAY PY/63 ST",
+    "lat": 40.615164,
+    "lng": -73.980053,
+    "obs": 2066
+  },
+  {
+    "name": "BAY PY/65 ST",
+    "lat": 40.614092,
+    "lng": -73.981173,
+    "obs": 3185
+  },
+  {
+    "name": "BAY PY/67 ST",
+    "lat": 40.612784,
+    "lng": -73.982552,
+    "obs": 2634
+  },
+  {
+    "name": "BAY PY/BAY RIDGE AV",
+    "lat": 40.611883,
+    "lng": -73.983465,
+    "obs": 1697
+  },
+  {
+    "name": "BAY PY/71 ST",
+    "lat": 40.61065,
+    "lng": -73.984751,
+    "obs": 2177
+  },
+  {
+    "name": "BAY PY/BAY RIDGE PY",
+    "lat": 40.608404,
+    "lng": -73.987094,
+    "obs": 2358
+  },
+  {
+    "name": "BAY PY/77 ST",
+    "lat": 40.607274,
+    "lng": -73.988261,
+    "obs": 2035
+  },
+  {
+    "name": "BAY PY/80 ST",
+    "lat": 40.605518,
+    "lng": -73.990095,
+    "obs": 1982
+  },
+  {
+    "name": "BAY PY/83 ST",
+    "lat": 40.603808,
+    "lng": -73.991874,
+    "obs": 1348
+  },
+  {
+    "name": "CROPSEY AV/26 AV",
+    "lat": 40.59023,
+    "lng": -73.991891,
+    "obs": 2035
+  },
+  {
+    "name": "26 AV/SHORE PKY SR N",
+    "lat": 40.589867,
+    "lng": -73.993127,
+    "obs": 1570
+  },
+  {
+    "name": "HARWAY AV/BAY 37 ST",
+    "lat": 40.592833,
+    "lng": -73.993413,
+    "obs": 11949
+  },
+  {
+    "name": "BAY PY/86 ST",
+    "lat": 40.602218,
+    "lng": -73.993533,
+    "obs": 3547
+  },
+  {
+    "name": "SHORE PKY/BAY 41 ST",
+    "lat": 40.590554,
+    "lng": -73.993917,
+    "obs": 694
+  },
+  {
+    "name": "BAY PY/BENSON AV",
+    "lat": 40.600397,
+    "lng": -73.99542,
+    "obs": 1049
+  },
+  {
+    "name": "SHORE PKY/BAYSIDE OIL",
+    "lat": 40.593196,
+    "lng": -73.996394,
+    "obs": 617
+  },
+  {
+    "name": "BAY PY/BATH AV",
+    "lat": 40.598817,
+    "lng": -73.997062,
+    "obs": 1733
+  },
+  {
+    "name": "SHORE PKY/R&S STRAUSS",
+    "lat": 40.59443,
+    "lng": -73.998015,
+    "obs": 774
+  },
+  {
+    "name": "BAY PKY/CROPSEY AV",
+    "lat": 40.597643,
+    "lng": -73.998284,
+    "obs": 2835
+  },
+  {
+    "name": "SHORE PY/BAY PY",
+    "lat": 40.595978,
+    "lng": -73.99998,
+    "obs": 1277
+  }
+]
+};
+
+const colors = { 0: '#01696f', 1: '#964219' };
+const visibleDirs = { 0: true, 1: true };
+let activeDir = 0;
+let markers = { 0: [], 1: [] };
+let polylines = { 0: null, 1: null };
+
+// ── MAP INIT ─────────────────────────────────────────────────────────────────
+const map = L.map('map').setView([40.640, -73.980], 13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CartoDB',
+  maxZoom: 19
+}).addTo(map);
+
+function makeIcon(dir, idx) {
+  const color = colors[dir];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+    <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5"/>
+    <text x="16" y="21" text-anchor="middle" fill="white" font-size="11" font-weight="700" font-family="sans-serif">${idx+1}</text>
+    <line x1="16" y1="30" x2="16" y2="40" stroke="${color}" stroke-width="2.5"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg, className: '', iconSize: [32, 40], iconAnchor: [16, 40], popupAnchor: [0, -40]
+  });
+}
+
+function renderStops() {
+  // Clear existing
+  Object.values(markers).flat().forEach(m => map.removeLayer(m));
+  markers = { 0: [], 1: [] };
+  [0, 1].forEach(dir => { if (polylines[dir]) { map.removeLayer(polylines[dir]); polylines[dir] = null; } });
+
+  [0, 1].forEach(dir => {
+    if (!visibleDirs[dir]) return;
+    const stops = stopsData[dir];
+    const latlngs = stops.map(s => [s.lat, s.lng]);
+
+    // Polyline
+    polylines[dir] = L.polyline(latlngs, {
+      color: colors[dir], weight: 3, opacity: 0.6, dashArray: '6 4'
+    }).addTo(map);
+
+    // Markers
+    stops.forEach((stop, idx) => {
+      const m = L.marker([stop.lat, stop.lng], { icon: makeIcon(dir, idx) })
+        .addTo(map)
+        .bindPopup(`
+          <div class="popup-title">${stop.name}</div>
+          <div class="popup-sub">Direction ${dir} · Stop ${idx + 1} of ${stops.length}</div>
+          <div class="popup-sub" style="margin-top:4px">📍 ${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)}</div>
+          <div class="popup-sub">🔢 ${stop.obs.toLocaleString()} observations</div>
+        `);
+      markers[dir].push(m);
+    });
+  });
+
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const list = document.getElementById('stop-list');
+  const stops = stopsData[activeDir];
+  document.getElementById('stop-count').textContent = stops.length;
+  list.innerHTML = stops.map((s, i) => `
+    <div class="stop-item" onclick="flyToStop(${activeDir}, ${i})">
+      <div class="stop-num" style="color:${colors[activeDir]}">${i+1}</div>
+      <div class="stop-info">
+        <div class="stop-name">${s.name}</div>
+        <div class="stop-obs">${s.obs.toLocaleString()} observations</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function flyToStop(dir, idx) {
+  const s = stopsData[dir][idx];
+  map.flyTo([s.lat, s.lng], 16, { duration: 0.8 });
+  if (markers[dir][idx]) markers[dir][idx].openPopup();
+  document.querySelectorAll('.stop-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+}
+
+function toggleDirection(dir, el) {
+  visibleDirs[dir] = !visibleDirs[dir];
+  el.classList.toggle('active');
+  renderStops();
+}
+
+function switchTab(dir, el) {
+  activeDir = dir;
+  document.querySelectorAll('.dir-tab').forEach((t, i) => t.classList.toggle('active-tab', i === dir));
+  renderSidebar();
+}
+
+// Initial render
+renderStops();
+</script>
+</body>
+</html>
