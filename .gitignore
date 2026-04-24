@@ -211,3 +211,6 @@ __marimo__/
 
 *.csv
 *.gexf
+
+# Unwanted directories
+ABA Datasets
